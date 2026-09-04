@@ -80,3 +80,15 @@ vercel deploy          # producción
 ```bash
 cd terraform && terraform destroy
 ```
+
+<!-- BEGIN cc:que-se-valora -->
+¡Hola! Soy tu tutor y estoy aquí para ayudarte a entender qué busco cuando corrijo tu proyecto "Aws Lambda Vite". No te preocupes, no es tan complicado como parece. Aquí te dejo una sección para tu README que te lo explica de forma sencilla:
+
+---
+
+## 📋 Qué se valora
+
+Cuando revise tu proyecto, me fijaré principalmente en que **funcione y cumpla con todo lo que se pide en el enunciado**, esto es, con diferencia, lo que más pesa en la evaluación. También le doy un peso importante a la **calidad de tu código y cómo has estructurado el proyecto**, para ver que está bien organizado y es fácil de entender. El **video demo** también es importante, ya que me permite ver tu proyecto en acción y cómo lo presentas. Finalmente, aunque con un peso menor, valoro que **documentes tus decisiones y expliques por qué hiciste las cosas de cierta manera**.
+
+Recuerda que el detalle de lo que se pide está en el enunciado del proyecto, y la evaluación no penalizará nada que no se haya solicitado explícitamente allí.
+<!-- END cc:que-se-valora -->
