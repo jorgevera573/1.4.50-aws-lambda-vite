@@ -100,6 +100,10 @@ Recuerda que el detalle de lo que se pide está en el enunciado del proyecto, y 
 > Todo lo anterior es el enunciado original, sin cambios. A partir de aquí se
 > documenta la implementación realizada.
 
+**Aplicación pública:** <https://ms05-lambda-vite.vercel.app>. Es una demo
+pública y sin autenticación: las tareas son compartidas; usar solo datos de prueba.
+**API:** `https://t10nkrm5h5.execute-api.us-east-1.amazonaws.com`.
+
 ## Arquitectura y responsabilidad de cada servicio
 
 | Servicio | Responsabilidad | Definido en |
@@ -111,7 +115,7 @@ Recuerda que el detalle de lo que se pide está en el enunciado del proyecto, y 
 | **IAM** | Rol de ejecución con *permissions boundary* (creada por un administrador) y permisos solo sobre la tabla del proyecto (`PutItem`, `GetItem`, `UpdateItem`, `DeleteItem`, `Scan`) y sobre su propio grupo de logs. Solo esta API puede invocar la Lambda. | `terraform/iam.tf` |
 | **CloudWatch Logs** | Logs de la Lambda, con retención de 14 días. | `terraform/lambda.tf` |
 | **Terraform** | Toda la infraestructura, con estado local independiente en `terraform/` y `allowed_account_ids = ["336846061737"]`. | `terraform/` |
-| **Vercel** | Hosting del frontend estático (fase posterior). | — |
+| **Vercel** | Hosting del frontend estático en <https://ms05-lambda-vite.vercel.app>, con `VITE_API_URL` apuntando a la API. | `frontend/` (Root Directory en Vercel) |
 
 Sobre el punto 2 de la «Solución» del enunciado: la explicación del 403 de la
 Function URL forma parte del enunciado original y **no se ha reproducido ni
@@ -276,7 +280,8 @@ Variables de Terraform principales (`terraform/terraform.tfvars.example`):
 | Frontend, estático | `npm run lint` (ESLint, 0 avisos permitidos) y `npm run typecheck` | Sin errores |
 | Frontend, build | `npm run build` | Correcto |
 | Terraform | `terraform fmt -check -recursive`, `init`, `validate`, `plan` | Correcto; plan: 14 a crear |
-| Script de integración | contra un servidor local que envuelve el handler con Moto | 19 comprobaciones superadas (no es la API real) |
+| Script de integración | contra un servidor local que envuelve el handler con Moto | 19 comprobaciones superadas |
+| Script de integración en AWS | `py -3.9 scripts\integration_test.py` contra la API real con el origen de Vercel (ejecutado por el alumno) | 19 comprobaciones correctas, incluido el preflight CORS; «Integración correcta» |
 
 **Backend** (`lambda/tests/test_handler.py`): las cinco operaciones; valores
 iniciales; actualización de título, estado y ambos; inmutabilidad de `id` y
@@ -301,8 +306,11 @@ persistencia al «recargar» la aplicación sin usar `localStorage`.
 
 ```powershell
 $api = terraform -chdir=terraform output -raw api_url
-py -3.12 scripts\integration_test.py --api-url $api --origin http://localhost:5173
+py -3.9 scripts\integration_test.py --api-url $api --origin https://ms05-lambda-vite.vercel.app
 ```
+
+Con `--origin` se comprueba el preflight CORS de ese origen: el de producción
+(Vercel) o `http://localhost:5173` en desarrollo.
 
 Crea una tarea marcada `[integration-test xxxxxxxx]`, la consulta, la busca en
 la lista, actualiza título y estado, comprueba la validación y que PUT no crea
@@ -376,8 +384,10 @@ incluye hashes de `windows_amd64`, `linux_amd64` y `linux_arm64` para que
 
   La rama `arm64` no se ejecutó porque no había emulación disponible; solo se
   comprobó que su ZIP figura en `SHA256SUMS`.
-- **Pendiente:** confirmar el resultado en un nuevo pipeline del runner
-  `cloudrun`. **Todavía no se ha ejecutado.**
+- **Resultado (confirmado por el alumno, 21/09/2026):** en el pipeline #3106
+  (commit `4105848`) aprobaron `backend`, `frontend` y `terraform` en el runner
+  `cloudrun`. La rama `arm64` sigue sin ejercitarse, porque el runner usado no
+  la necesitó.
 
 ## Despliegue
 
@@ -403,9 +413,25 @@ terraform output
 3. Variable de entorno `VITE_API_URL` = `terraform output -raw api_url`
    (entornos Production y, si se usan, Preview). Tras cambiarla hay que redesplegar,
    porque se incrusta en el build.
-4. Desplegar y anotar el dominio de producción, p. ej. `https://mi-proyecto.vercel.app`.
+4. Desplegar y anotar el dominio de producción. En esta práctica es
+   `https://ms05-lambda-vite.vercel.app`.
 5. Añadir ese dominio **exacto** a `cors_allow_origins` en `terraform.tfvars` y
    ejecutar `terraform plan` / `apply`. Solo cambia la configuración CORS de la API.
+
+Configuración CORS de producción (`terraform.tfvars`), sin comodines ni barra final:
+
+```hcl
+cors_allow_origins = [
+  "http://localhost:5173",               # desarrollo
+  "http://127.0.0.1:5173",               # desarrollo
+  "https://ms05-lambda-vite.vercel.app", # producción (Vercel)
+]
+```
+
+El plan de este cambio (`tfplan-cors`) solo modificaba la API `t10nkrm5h5`
+(`allow_origins`): 0 recursos nuevos y 0 destruidos. Que el origen de producción
+está activo lo confirma el preflight CORS del script de integración ejecutado
+desde el equipo del alumno.
 
 Los despliegues *Preview* de Vercel usan dominios distintos: no funcionarán
 contra la API salvo que se añada también su dominio (no se recomienda un comodín).
@@ -456,7 +482,10 @@ estado ni recurso de ALINA ni de la práctica de Ansible.
 
 ## Resultados comprobados y verificaciones pendientes
 
-### Comprobaciones automatizadas locales (20-21/09/2026)
+Aplicación: <https://ms05-lambda-vite.vercel.app> ·
+API: `https://t10nkrm5h5.execute-api.us-east-1.amazonaws.com`
+
+### 1. Pruebas y comprobaciones locales (automatizadas, 20-21/09/2026)
 
 - Herramientas: Node 24.19.0, npm 11.17.0, Terraform 1.16.3, Python 3.12.10,
   AWS CLI 2.35.23; identidad `master-semana05` en la cuenta 336846061737.
@@ -467,45 +496,68 @@ estado ni recurso de ALINA ni de la práctica de Ansible.
   [docs/permisos-iam.md](docs/permisos-iam.md)).
 - Terraform: `fmt`, `init` y `validate` correctos; `init -backend=false` con
   lockfile de solo lectura (como en CI) correcto; ZIP de la Lambda reproducible.
-- Script de integración: correcto contra un servidor local con Moto. **Todavía
-  no se ha ejecutado contra la API real.**
-- GitLab CI: en el pipeline #3105 (commit `2f1b37e`) pasaron `backend` y `frontend` y falló `terraform` porque el runner no tiene Terraform. El job corregido se ha probado en contenedores Linux, pero **aún no en el runner** (ver «Terraform en el runner efímero»).
+- Job `terraform` del CI ejecutado en contenedores Ubuntu 24.04 `linux/amd64`
+  limpios: descarga verificada correcta y casos de error esperados (ver
+  «Terraform en el runner efímero»).
+- Script de integración: correcto también contra un servidor local con Moto.
 
-### Despliegue en AWS (21/09/2026)
+### 2. Integración continua en el runner (confirmado por el alumno, 21/09/2026)
 
-- Preparación administrativa: boundary, políticas del desplegador y bootstrap
-  de la HTTP API `t10nkrm5h5`, según [docs/permisos-iam.md](docs/permisos-iam.md).
-- Terraform importó la API y creó los demás recursos en tres `apply`
-  sucesivos. Los dos primeros fueron parciales por permisos de etiquetado de
-  API Gateway que no estaban documentados; las incidencias están descritas en
-  [docs/permisos-iam.md](docs/permisos-iam.md).
-- Tras el despliegue, `terraform plan -detailed-exitcode` terminó con
-  **«No changes»** (código 0): 14 recursos en el estado y ninguna deriva.
+- Pipeline #3105 (commit `2f1b37e`): pasaron `backend` y `frontend`; falló
+  `terraform` porque el runner no tenía Terraform (incidencia documentada en
+  «Terraform en el runner efímero»).
+- Pipeline **#3106** (commit **`4105848`**): **aprobados `backend`, `frontend` y
+  `terraform`** en el runner `cloudrun`.
+
+### 3. Despliegue (21/09/2026)
+
+- **AWS:** tras la preparación administrativa (boundary, políticas del
+  desplegador y bootstrap de la HTTP API `t10nkrm5h5`, según
+  [docs/permisos-iam.md](docs/permisos-iam.md)), Terraform importó la API y creó
+  los demás recursos en tres `apply` sucesivos. Los dos primeros fueron parciales
+  por permisos de etiquetado de API Gateway que no estaban documentados; las
+  incidencias están descritas en ese documento. Después, `terraform plan
+  -detailed-exitcode` terminó con **«No changes»**: 14 recursos y ninguna deriva.
 - Outputs: `api_url = https://t10nkrm5h5.execute-api.us-east-1.amazonaws.com`,
   `table_name = ms05-lambda-vite-lab-tasks`,
   `lambda_function_name = ms05-lambda-vite-lab-api`.
+- **Vercel:** frontend publicado en <https://ms05-lambda-vite.vercel.app>
+  (confirmado por el alumno).
+- **CORS de producción:** se añadió `https://ms05-lambda-vite.vercel.app` a
+  `cors_allow_origins`, junto con los dos orígenes locales. El plan `tfplan-cors`
+  solo modificaba `allow_origins` de la API: 0 recursos nuevos y 0 destruidos.
 
-### Pruebas manuales realizadas por el alumno (21/09/2026)
+### 4. Integración automatizada contra AWS real (ejecutada por el alumno, 21/09/2026)
 
-Las hizo el alumno a mano contra la API real y con la interfaz en
-`http://localhost:5173` conectada a ella. No son pruebas automatizadas.
+`scripts/integration_test.py` se ejecutó con `py -3.9` contra
+`https://t10nkrm5h5.execute-api.us-east-1.amazonaws.com` y con el origen de
+Vercel:
 
-- API (`https://t10nkrm5h5.execute-api.us-east-1.amazonaws.com`):
-  - `POST /tasks` creó una tarea.
-  - `GET /tasks/{id}` y `GET /tasks` la recuperaron.
-  - `PUT /tasks/{id}` cambió el título y `completed`; una consulta posterior
-    confirmó que los cambios se habían guardado.
-  - `DELETE /tasks/{id}` la eliminó; el `GET` posterior devolvió `404`.
-- Navegador: crear, editar, completar, **persistencia tras recargar** la página
-  y eliminar. Todas conformes.
+- **19 comprobaciones correctas**, incluido el **preflight CORS para
+  `https://ms05-lambda-vite.vercel.app`**; terminó con «Integración correcta».
+- Recorrido: crear, consultar, encontrar en la lista, actualizar título y
+  estado (con persistencia comprobada), validación (`completed` no booleano →
+  400; PUT sobre id inexistente → 404 sin crear nada), eliminar y comprobar 404.
+- La tarea creada por el script se eliminó; no se tocaron tareas ajenas.
+
+### 5. Pruebas manuales realizadas por el alumno (21/09/2026)
+
+Pruebas manuales, no automatizadas:
+
+- **API real:** `POST /tasks` creó una tarea; `GET /tasks/{id}` y `GET /tasks`
+  la recuperaron; `PUT /tasks/{id}` cambió título y `completed`, y una consulta
+  posterior confirmó los cambios; `DELETE /tasks/{id}` la eliminó y el `GET`
+  posterior devolvió `404`.
+- **Interfaz local** (`http://localhost:5173` contra la API real): crear,
+  editar, completar, **persistencia tras recargar** y eliminar. Todo conforme.
+- **Interfaz en producción** (<https://ms05-lambda-vite.vercel.app>): crear,
+  editar, completar, **recargar para verificar la persistencia** y eliminar.
+  Todo conforme.
 
 ### Pendiente
 
-- Ejecutar `scripts/integration_test.py` contra la API real (en este equipo,
-  con `py -3.9`; ver la nota del firewall).
-- Desplegar el frontend en Vercel, añadir su dominio exacto a
-  `cors_allow_origins`, hacer `terraform plan`/`apply` y repetir las
-  comprobaciones desde producción.
-- Ejecutar un nuevo pipeline en el runner `cloudrun` y confirmar que el job
-  `terraform` descarga, verifica y usa Terraform 1.16.3.
 - Grabar el vídeo de demostración.
+- Opcional: ejercitar la rama `arm64` del job `terraform` si alguna vez se usa
+  un runner ARM, y verificar la firma GPG de `SHA256SUMS`.
+- Cuando termine la evaluación, limpiar los recursos siguiendo «Limpieza» y
+  [docs/permisos-iam.md](docs/permisos-iam.md).

@@ -16,9 +16,9 @@ enable_api_access_logs = false
 # Con valor, el primer plan/apply importa la API al estado en lugar de crearla.
 # http_api_id = "a1b2c3d4e5"
 
-# Desarrollo local + dominio concreto de Vercel (añadir tras el primer despliegue).
+# Desarrollo local + dominio concreto de producción en Vercel (sin barra final ni comodines).
 cors_allow_origins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-  # "https://mi-proyecto.vercel.app",
+  "https://ms05-lambda-vite.vercel.app",
 ]
