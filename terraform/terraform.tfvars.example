@@ -1,0 +1,24 @@
+# Copia este archivo como terraform.tfvars (excluido de Git) y ajusta los valores.
+# No contiene secretos: las credenciales se toman del perfil de AWS CLI.
+
+aws_profile        = "master-semana05"
+aws_region         = "us-east-1"
+allowed_account_id = "336846061737"
+
+project_name = "ms05-lambda-vite"
+environment  = "lab"
+
+# Logs de acceso de API Gateway: desactivados en esta práctica (exigirían permisos
+# globales de entregas y políticas de recursos de CloudWatch Logs).
+enable_api_access_logs = false
+
+# ID de la HTTP API creada por el administrador en el bootstrap (docs/permisos-iam.md).
+# Con valor, el primer plan/apply importa la API al estado en lugar de crearla.
+# http_api_id = "a1b2c3d4e5"
+
+# Desarrollo local + dominio concreto de Vercel (añadir tras el primer despliegue).
+cors_allow_origins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  # "https://mi-proyecto.vercel.app",
+]

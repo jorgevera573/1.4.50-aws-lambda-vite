@@ -1,0 +1,6 @@
+# Dependencias de desarrollo y pruebas (Python 3.12). Versiones fijadas.
+boto3==1.43.98
+botocore==1.43.98
+moto[dynamodb]==5.2.3
+pytest==9.1.1
+ruff==0.16.8

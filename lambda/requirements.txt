@@ -1,0 +1,7 @@
+# Dependencias de ejecución de la Lambda.
+#
+# El handler solo usa la biblioteca estándar y boto3, que ya incluye el
+# runtime gestionado python3.12 de AWS Lambda. Por eso el paquete ZIP
+# contiene únicamente handler.py y no se instala nada aquí.
+#
+# boto3 se fija en requirements-dev.txt para las pruebas locales.

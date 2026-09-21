@@ -1,0 +1,119 @@
+# Pipeline de calidad: sin despliegue y sin credenciales AWS.
+#
+# Runner: etiqueta "cloudrun", ejecutor shell (no se usa image:).
+# Cada job comprueba las herramientas del runner, instala dependencias en un
+# directorio temporal propio y lo elimina en after_script. No se instala nada
+# de forma global ni se modifican las herramientas del runner.
+# Ningún job contacta con los recursos AWS desplegados.
+
+stages:
+  - quality
+
+variables:
+  # Directorio temporal exclusivo del job; after_script lo borra.
+  JOB_TMP: "/tmp/ms05-lambda-vite-${CI_PIPELINE_ID}-${CI_JOB_ID}"
+  # Credenciales ficticias: ningún SDK puede usar credenciales reales del runner.
+  AWS_ACCESS_KEY_ID: "ci-sin-credenciales"
+  AWS_SECRET_ACCESS_KEY: "ci-sin-credenciales"
+  AWS_DEFAULT_REGION: "us-east-1"
+  AWS_EC2_METADATA_DISABLED: "true"
+  GIT_DEPTH: "20"
+
+default:
+  tags:
+    - cloudrun
+  interruptible: true
+  # El runner de GitLab ya ejecuta bash con "set -eo pipefail".
+  before_script:
+    - rm -rf "$JOB_TMP"
+    - mkdir -p "$JOB_TMP"
+  after_script:
+    - |
+      rm -rf "$JOB_TMP" \
+        "$CI_PROJECT_DIR/frontend/node_modules" \
+        "$CI_PROJECT_DIR/frontend/dist" \
+        "$CI_PROJECT_DIR/terraform/build"
+      echo "Directorios temporales eliminados."
+
+backend:
+  stage: quality
+  script:
+    - |
+      PYTHON=""
+      for candidate in python3.12 python3; do
+        if command -v "$candidate" >/dev/null 2>&1 &&
+          "$candidate" -c 'import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) else 1)'; then
+          PYTHON="$candidate"
+          break
+        fi
+      done
+      if [ -z "$PYTHON" ]; then
+        echo "ERROR: el runner necesita Python 3.12 con el modulo venv." >&2
+        exit 1
+      fi
+      "$PYTHON" --version
+    - |
+      "$PYTHON" -m venv "$JOB_TMP/venv"
+      export PIP_CACHE_DIR="$JOB_TMP/pip-cache" PIP_DISABLE_PIP_VERSION_CHECK=1
+      "$JOB_TMP/venv/bin/pip" install --quiet -r lambda/requirements-dev.txt
+    - cd lambda
+    - |
+      "$JOB_TMP/venv/bin/ruff" check --no-cache .
+      "$JOB_TMP/venv/bin/ruff" format --no-cache --check .
+      "$JOB_TMP/venv/bin/ruff" check --no-cache --config pyproject.toml ../scripts
+      "$JOB_TMP/venv/bin/ruff" format --no-cache --check --config pyproject.toml ../scripts
+    - |
+      "$JOB_TMP/venv/bin/python" -m pytest -p no:cacheprovider \
+        --junitxml="$CI_PROJECT_DIR/backend-junit.xml"
+  artifacts:
+    when: always
+    expire_in: 1 week
+    reports:
+      junit: backend-junit.xml
+
+frontend:
+  stage: quality
+  script:
+    - |
+      if ! command -v node >/dev/null 2>&1; then
+        echo "ERROR: el runner necesita Node.js >= 22.12." >&2
+        exit 1
+      fi
+      node --version
+      npm --version
+      node -e 'const [a, b] = process.versions.node.split(".").map(Number); process.exit(a > 22 || (a === 22 && b >= 12) ? 0 : 1)' ||
+        { echo "ERROR: se requiere Node.js >= 22.12." >&2; exit 1; }
+    # Sintaxis, tamaño y marcadores de las políticas IAM (sin red).
+    - node scripts/check-iam-policies.mjs --offline
+    - cd frontend
+    # Caché de npm en el directorio temporal: no toca ~/.npm del runner.
+    - npm ci --cache "$JOB_TMP/npm-cache" --no-audit --no-fund
+    - npm run lint
+    - npm run typecheck
+    - npm test -- --reporter=default --reporter=junit --outputFile.junit="$CI_PROJECT_DIR/frontend-junit.xml"
+    - npm run build
+  artifacts:
+    when: always
+    expire_in: 1 week
+    reports:
+      junit: frontend-junit.xml
+
+terraform:
+  stage: quality
+  variables:
+    TF_IN_AUTOMATION: "true"
+    TF_INPUT: "false"
+  script:
+    - |
+      if ! command -v terraform >/dev/null 2>&1; then
+        echo "ERROR: el runner necesita Terraform >= 1.9." >&2
+        exit 1
+      fi
+      terraform version
+    # Datos de trabajo y caché de proveedores fuera del repositorio.
+    - export TF_DATA_DIR="$JOB_TMP/tf-data" TF_PLUGIN_CACHE_DIR="$JOB_TMP/tf-plugins"
+    - mkdir -p "$TF_PLUGIN_CACHE_DIR"
+    - terraform -chdir=terraform fmt -check -recursive -diff
+    # Sin backend: no lee ni escribe estado y no necesita credenciales.
+    - terraform -chdir=terraform init -backend=false -lockfile=readonly
+    - terraform -chdir=terraform validate

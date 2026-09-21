@@ -1,0 +1,120 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "IamCreateProjectRoleOnlyWithBoundary",
+      "Effect": "Allow",
+      "Action": "iam:CreateRole",
+      "Resource": "arn:aws:iam::336846061737:role/ms05-lambda-vite-lab-lambda-role",
+      "Condition": {
+        "StringEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::336846061737:policy/ms05-lambda-vite-lab-lambda-boundary",
+          "aws:RequestTag/Project": "master-semana05-lambda-vite"
+        }
+      }
+    },
+    {
+      "Sid": "IamManageProjectRoleWhileBoundaryIsAttached",
+      "Effect": "Allow",
+      "Action": [
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:UpdateRole",
+        "iam:UpdateRoleDescription",
+        "iam:DeleteRole"
+      ],
+      "Resource": "arn:aws:iam::336846061737:role/ms05-lambda-vite-lab-lambda-role",
+      "Condition": {
+        "StringEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::336846061737:policy/ms05-lambda-vite-lab-lambda-boundary"
+        }
+      }
+    },
+    {
+      "Sid": "IamReadProjectRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListInstanceProfilesForRole"
+      ],
+      "Resource": "arn:aws:iam::336846061737:role/ms05-lambda-vite-lab-lambda-role"
+    },
+    {
+      "Sid": "IamTagProjectRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:TagRole",
+        "iam:UntagRole"
+      ],
+      "Resource": "arn:aws:iam::336846061737:role/ms05-lambda-vite-lab-lambda-role",
+      "Condition": {
+        "ForAllValues:StringEquals": {
+          "aws:TagKeys": [
+            "Project",
+            "ManagedBy",
+            "Env"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "IamReadBoundaryPolicy",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetPolicy",
+        "iam:GetPolicyVersion"
+      ],
+      "Resource": "arn:aws:iam::336846061737:policy/ms05-lambda-vite-lab-lambda-boundary"
+    },
+    {
+      "Sid": "IamPassProjectRoleToLambdaOnly",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::336846061737:role/ms05-lambda-vite-lab-lambda-role",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "lambda.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "DenyRoleCreationWithoutProjectBoundary",
+      "Effect": "Deny",
+      "Action": "iam:CreateRole",
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::336846061737:policy/ms05-lambda-vite-lab-lambda-boundary"
+        }
+      }
+    },
+    {
+      "Sid": "DenyRemovingOrReplacingBoundaryOnProjectRole",
+      "Effect": "Deny",
+      "Action": [
+        "iam:DeleteRolePermissionsBoundary",
+        "iam:PutRolePermissionsBoundary",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy"
+      ],
+      "Resource": "arn:aws:iam::336846061737:role/ms05-lambda-vite-lab-lambda-role"
+    },
+    {
+      "Sid": "DenyChangingBoundaryPolicy",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicyVersion",
+        "iam:SetDefaultPolicyVersion",
+        "iam:DeletePolicy",
+        "iam:TagPolicy",
+        "iam:UntagPolicy"
+      ],
+      "Resource": "arn:aws:iam::336846061737:policy/ms05-lambda-vite-lab-lambda-boundary"
+    }
+  ]
+}

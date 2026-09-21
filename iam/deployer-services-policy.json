@@ -1,0 +1,214 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadCallerIdentity",
+      "Effect": "Allow",
+      "Action": "sts:GetCallerIdentity",
+      "Resource": "*"
+    },
+    {
+      "Sid": "DynamoDBCreateTableWithProjectTag",
+      "Effect": "Allow",
+      "Action": "dynamodb:CreateTable",
+      "Resource": "arn:aws:dynamodb:us-east-1:336846061737:table/ms05-lambda-vite-lab-tasks",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/Project": "master-semana05-lambda-vite"
+        }
+      }
+    },
+    {
+      "Sid": "DynamoDBManageProjectTable",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:DescribeTable",
+        "dynamodb:UpdateTable",
+        "dynamodb:DeleteTable",
+        "dynamodb:DescribeContinuousBackups",
+        "dynamodb:DescribeTimeToLive",
+        "dynamodb:ListTagsOfResource"
+      ],
+      "Resource": "arn:aws:dynamodb:us-east-1:336846061737:table/ms05-lambda-vite-lab-tasks"
+    },
+    {
+      "Sid": "DynamoDBTagProjectTable",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:TagResource",
+        "dynamodb:UntagResource"
+      ],
+      "Resource": "arn:aws:dynamodb:us-east-1:336846061737:table/ms05-lambda-vite-lab-tasks",
+      "Condition": {
+        "ForAllValues:StringEquals": {
+          "aws:TagKeys": [
+            "Project",
+            "ManagedBy",
+            "Env"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "LambdaCreateFunctionWithProjectTag",
+      "Effect": "Allow",
+      "Action": "lambda:CreateFunction",
+      "Resource": "arn:aws:lambda:us-east-1:336846061737:function:ms05-lambda-vite-lab-api",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/Project": "master-semana05-lambda-vite"
+        }
+      }
+    },
+    {
+      "Sid": "LambdaManageProjectFunction",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:GetFunctionCodeSigningConfig",
+        "lambda:GetFunctionRecursionConfig",
+        "lambda:GetRuntimeManagementConfig",
+        "lambda:ListVersionsByFunction",
+        "lambda:GetPolicy",
+        "lambda:ListTags",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:DeleteFunction"
+      ],
+      "Resource": "arn:aws:lambda:us-east-1:336846061737:function:ms05-lambda-vite-lab-api"
+    },
+    {
+      "Sid": "LambdaTagProjectFunction",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:TagResource",
+        "lambda:UntagResource"
+      ],
+      "Resource": "arn:aws:lambda:us-east-1:336846061737:function:ms05-lambda-vite-lab-api",
+      "Condition": {
+        "ForAllValues:StringEquals": {
+          "aws:TagKeys": [
+            "Project",
+            "ManagedBy",
+            "Env"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "LambdaInvokePermissionOnlyForApiGateway",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:AddPermission",
+        "lambda:RemovePermission"
+      ],
+      "Resource": "arn:aws:lambda:us-east-1:336846061737:function:ms05-lambda-vite-lab-api",
+      "Condition": {
+        "StringEquals": {
+          "lambda:Principal": "apigateway.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "ApiGatewayManageBootstrappedApiOnly",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:GET",
+        "apigateway:PATCH",
+        "apigateway:DELETE"
+      ],
+      "Resource": "arn:aws:apigateway:us-east-1::/apis/__API_ID__"
+    },
+    {
+      "Sid": "ApiGatewayManageChildResourcesOfBootstrappedApi",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:GET",
+        "apigateway:POST",
+        "apigateway:PATCH",
+        "apigateway:DELETE"
+      ],
+      "Resource": "arn:aws:apigateway:us-east-1::/apis/__API_ID__/*"
+    },
+    {
+      "Sid": "ApiGatewayTagsOfBootstrappedApiAndStages",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:GET",
+        "apigateway:PUT",
+        "apigateway:DELETE"
+      ],
+      "Resource": [
+        "arn:aws:apigateway:us-east-1::/tags/arn%3Aaws%3Aapigateway%3Aus-east-1%3A%3A%2Fapis%2F__API_ID__",
+        "arn:aws:apigateway:us-east-1::/tags/arn%3Aaws%3Aapigateway%3Aus-east-1%3A%3A%2Fapis%2F__API_ID__%2F*",
+        "arn:aws:apigateway:us-east-1::/tags/arn:aws:apigateway:us-east-1::/apis/__API_ID__",
+        "arn:aws:apigateway:us-east-1::/tags/arn:aws:apigateway:us-east-1::/apis/__API_ID__/*"
+      ]
+    },
+    {
+      "Sid": "ApiGatewayTagResourceOnBootstrappedApi",
+      "Effect": "Allow",
+      "Action": "apigateway:POST",
+      "Resource": "arn:aws:apigateway:us-east-1::/tags/arn:aws:apigateway:us-east-1::/apis/__API_ID__"
+    },
+    {
+      "Sid": "ApiGatewayTagOnCreateStageOfBootstrappedApi",
+      "Effect": "Allow",
+      "Action": "apigateway:TagResource",
+      "Resource": "arn:aws:apigateway:us-east-1::/apis/__API_ID__/stages"
+    },
+    {
+      "Sid": "LogsCreateProjectLogGroupWithProjectTag",
+      "Effect": "Allow",
+      "Action": "logs:CreateLogGroup",
+      "Resource": "arn:aws:logs:us-east-1:336846061737:log-group:/aws/lambda/ms05-lambda-vite-lab-api:*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/Project": "master-semana05-lambda-vite"
+        }
+      }
+    },
+    {
+      "Sid": "LogsManageProjectLogGroup",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DeleteLogGroup",
+        "logs:PutRetentionPolicy",
+        "logs:DeleteRetentionPolicy",
+        "logs:ListTagsForResource"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-1:336846061737:log-group:/aws/lambda/ms05-lambda-vite-lab-api",
+        "arn:aws:logs:us-east-1:336846061737:log-group:/aws/lambda/ms05-lambda-vite-lab-api:*"
+      ]
+    },
+    {
+      "Sid": "LogsTagProjectLogGroup",
+      "Effect": "Allow",
+      "Action": [
+        "logs:TagResource",
+        "logs:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-1:336846061737:log-group:/aws/lambda/ms05-lambda-vite-lab-api",
+        "arn:aws:logs:us-east-1:336846061737:log-group:/aws/lambda/ms05-lambda-vite-lab-api:*"
+      ],
+      "Condition": {
+        "ForAllValues:StringEquals": {
+          "aws:TagKeys": [
+            "Project",
+            "ManagedBy",
+            "Env"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "LogsDescribeLogGroupsHasNoResourceLevelPermissions",
+      "Effect": "Allow",
+      "Action": "logs:DescribeLogGroups",
+      "Resource": "*"
+    }
+  ]
+}
