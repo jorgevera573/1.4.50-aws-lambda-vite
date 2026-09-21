@@ -98,18 +98,68 @@ frontend:
     reports:
       junit: frontend-junit.xml
 
+# El runner efímero no trae Terraform: el job descarga la versión fijada desde
+# releases.hashicorp.com, verifica el ZIP contra el SHA256SUMS oficial y usa el
+# binario desde $JOB_TMP (que after_script elimina). No toca el PATH global.
 terraform:
   stage: quality
   variables:
+    TF_VERSION: "1.16.3"
     TF_IN_AUTOMATION: "true"
     TF_INPUT: "false"
   script:
     - |
-      if ! command -v terraform >/dev/null 2>&1; then
-        echo "ERROR: el runner necesita Terraform >= 1.9." >&2
+      case "$(uname -s)/$(uname -m)" in
+        Linux/x86_64 | Linux/amd64) TF_ARCH="amd64" ;;
+        Linux/aarch64 | Linux/arm64) TF_ARCH="arm64" ;;
+        *)
+          echo "ERROR: plataforma no soportada para Terraform: $(uname -s)/$(uname -m) (se admite Linux x86_64 o aarch64)." >&2
+          exit 1
+          ;;
+      esac
+      for tool in curl sha256sum awk; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+          echo "ERROR: el runner necesita '$tool' para descargar y verificar Terraform." >&2
+          exit 1
+        fi
+      done
+    - |
+      TF_BIN_DIR="$JOB_TMP/terraform-bin"
+      TF_ZIP="terraform_${TF_VERSION}_linux_${TF_ARCH}.zip"
+      TF_URL="https://releases.hashicorp.com/terraform/${TF_VERSION}"
+      mkdir -p "$TF_BIN_DIR"
+      curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$TF_BIN_DIR/$TF_ZIP" "$TF_URL/$TF_ZIP"
+      curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$TF_BIN_DIR/SHA256SUMS" "$TF_URL/terraform_${TF_VERSION}_SHA256SUMS"
+      # Verificación antes de extraer: exactamente una línea para este ZIP y hash correcto.
+      awk -v zip="$TF_ZIP" '$2 == zip' "$TF_BIN_DIR/SHA256SUMS" > "$TF_BIN_DIR/selected.sha256"
+      if [ "$(wc -l < "$TF_BIN_DIR/selected.sha256")" -ne 1 ]; then
+        echo "ERROR: $TF_ZIP no figura exactamente una vez en SHA256SUMS." >&2
         exit 1
       fi
-      terraform version
+      if ! (cd "$TF_BIN_DIR" && sha256sum -c selected.sha256); then
+        echo "ERROR: el SHA256 de $TF_ZIP no coincide con el SHA256SUMS oficial." >&2
+        exit 1
+      fi
+      if command -v unzip >/dev/null 2>&1; then
+        unzip -q -o "$TF_BIN_DIR/$TF_ZIP" terraform -d "$TF_BIN_DIR"
+      elif command -v python3 >/dev/null 2>&1; then
+        python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extract("terraform", sys.argv[2])' "$TF_BIN_DIR/$TF_ZIP" "$TF_BIN_DIR"
+      else
+        echo "ERROR: el runner necesita 'unzip' o 'python3' para extraer Terraform." >&2
+        exit 1
+      fi
+      chmod +x "$TF_BIN_DIR/terraform"
+      rm -f "$TF_BIN_DIR/$TF_ZIP"
+      export PATH="$TF_BIN_DIR:$PATH"
+    - |
+      TF_VERSION_OUTPUT="$(terraform version)"
+      echo "$TF_VERSION_OUTPUT"
+      # Sin tuberías: con pipefail, "| head" podría fallar por SIGPIPE.
+      if [ "$(command -v terraform)" != "$TF_BIN_DIR/terraform" ] ||
+        [ "${TF_VERSION_OUTPUT%%$'\n'*}" != "Terraform v${TF_VERSION}" ]; then
+        echo "ERROR: no se está usando el Terraform ${TF_VERSION} descargado." >&2
+        exit 1
+      fi
     # Datos de trabajo y caché de proveedores fuera del repositorio.
     - export TF_DATA_DIR="$JOB_TMP/tf-data" TF_PLUGIN_CACHE_DIR="$JOB_TMP/tf-plugins"
     - mkdir -p "$TF_PLUGIN_CACHE_DIR"

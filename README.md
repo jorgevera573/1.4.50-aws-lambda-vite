@@ -142,7 +142,7 @@ Las decisiones de diseño y sus motivos están en [docs/decisiones.md](docs/deci
 | Node.js / npm | 24.19.0 / 11.17.0 | Frontend (requiere Node ≥ 22.12) |
 | Python | 3.12.10 | Pruebas del backend (mismo runtime que la Lambda) |
 | Terraform | 1.16.3 | Infraestructura (requiere ≥ 1.9) |
-| Proveedor AWS / archive | 6.65.0 / 2.8.1 | Fijados en `.terraform.lock.hcl` (hashes Windows y Linux) |
+| Proveedor AWS / archive | 6.65.0 / 2.8.1 | Fijados en `.terraform.lock.hcl` (hashes windows_amd64, linux_amd64 y linux_arm64) |
 | AWS CLI | 2.35.23 | Consultas y perfil `master-semana05` |
 
 Dependencias fijadas (versión exacta):
@@ -322,13 +322,62 @@ p. ej. `py -3.9`.)
   instala `requirements-dev.txt`, ejecuta ruff (lint y formato) y pytest.
 - **frontend**: comprueba Node ≥ 22.12, valida las políticas `iam/*.json` sin red (`scripts/check-iam-policies.mjs --offline`), `npm ci` con caché temporal, lint,
   tipos, pruebas (informe JUnit) y build.
-- **terraform**: `fmt -check`, `init -backend=false -lockfile=readonly` y
-  `validate`, con `TF_DATA_DIR` y caché de proveedores en el directorio temporal.
+- **terraform**: prepara su propio Terraform (ver abajo) y ejecuta `fmt -check`,
+  `init -backend=false -lockfile=readonly` y `validate`, con `TF_DATA_DIR` y la
+  caché de proveedores en el directorio temporal. No ejecuta `plan`, `apply` ni
+  `destroy` y no usa credenciales.
 
 Cada job crea `/tmp/ms05-lambda-vite-<pipeline>-<job>` y `after_script` lo
 borra junto con `node_modules`, `dist` y `terraform/build`. No se instala nada
 globalmente. Las variables AWS del pipeline son ficticias: ningún job usa
 credenciales ni contacta con los recursos desplegados.
+
+### Terraform en el runner efímero
+
+El job `terraform` no depende de una instalación global. Hace lo siguiente:
+
+1. Detecta la plataforma con `uname`. Solo admite Linux `x86_64`/`amd64` y
+   `aarch64`/`arm64`; con cualquier otra falla con un mensaje explícito.
+2. Comprueba que existen `curl`, `sha256sum` y `awk`.
+3. Descarga `terraform_1.16.3_linux_<arch>.zip` y `terraform_1.16.3_SHA256SUMS`
+   de `https://releases.hashicorp.com`, solo por HTTPS.
+4. Verifica **antes de extraer** que el ZIP aparece exactamente una vez en
+   `SHA256SUMS` y que `sha256sum -c` da `OK`. Si no, el job falla sin extraer nada.
+5. Extrae solo el binario, con `unzip` o, si falta, con `python3`, en
+   `$JOB_TMP/terraform-bin`. Lo antepone al `PATH` solo dentro del job y
+   comprueba que `terraform` apunta a ese binario y es la versión `v1.16.3`.
+
+La versión se fija en la variable `TF_VERSION` del job. El `.terraform.lock.hcl`
+incluye hashes de `windows_amd64`, `linux_amd64` y `linux_arm64` para que
+`-lockfile=readonly` funcione en ambas arquitecturas de Linux.
+
+> Queda como posible mejora verificar la firma GPG de HashiCorp sobre
+> `SHA256SUMS`. Hoy se comprueba la integridad contra el fichero oficial
+> descargado por HTTPS.
+
+#### Incidencia: pipeline #3105 (commit `2f1b37e`)
+
+- **Síntoma:** los jobs `backend` y `frontend` pasaron. El job `terraform` (#12958,
+  runner #3 `cloudrun-ephemeral`, ejecutor shell con bash) falló en la
+  comprobación inicial con «ERROR: el runner necesita Terraform >= 1.9.».
+- **Causa:** el job suponía un Terraform instalado en el runner, y el runner
+  efímero no lo tiene.
+- **Corrección:** el job descarga y verifica su propio Terraform, como se
+  describe arriba. Se ha tomado como referencia el CI de la práctica
+  1.4.30-ansible-aws, sin modificarlo. Los jobs `backend` y `frontend` no
+  cambian.
+- **Verificación local:** el job extraído del YAML se ejecutó en contenedores
+  Ubuntu 24.04 `linux/amd64` limpios, sin Terraform:
+  - con `unzip`: correcto;
+  - sin `unzip`, extrayendo con `python3`: correcto;
+  - arquitectura simulada no soportada: falla con el mensaje previsto;
+  - ZIP manipulado: `sha256sum` da `FAILED`, el job falla y no se extrae nada;
+  - sin `curl`: falla con el mensaje previsto.
+
+  La rama `arm64` no se ejecutó porque no había emulación disponible; solo se
+  comprobó que su ZIP figura en `SHA256SUMS`.
+- **Pendiente:** confirmar el resultado en un nuevo pipeline del runner
+  `cloudrun`. **Todavía no se ha ejecutado.**
 
 ## Despliegue
 
@@ -420,7 +469,7 @@ estado ni recurso de ALINA ni de la práctica de Ansible.
   lockfile de solo lectura (como en CI) correcto; ZIP de la Lambda reproducible.
 - Script de integración: correcto contra un servidor local con Moto. **Todavía
   no se ha ejecutado contra la API real.**
-- YAML de GitLab CI analizado sin errores; **no se ha ejecutado en el runner**.
+- GitLab CI: en el pipeline #3105 (commit `2f1b37e`) pasaron `backend` y `frontend` y falló `terraform` porque el runner no tiene Terraform. El job corregido se ha probado en contenedores Linux, pero **aún no en el runner** (ver «Terraform en el runner efímero»).
 
 ### Despliegue en AWS (21/09/2026)
 
@@ -457,6 +506,6 @@ Las hizo el alumno a mano contra la API real y con la interfaz en
 - Desplegar el frontend en Vercel, añadir su dominio exacto a
   `cors_allow_origins`, hacer `terraform plan`/`apply` y repetir las
   comprobaciones desde producción.
-- Ejecutar el pipeline en el runner `cloudrun` y confirmar que tiene Python
-  3.12 con `venv`, Node ≥ 22.12 y Terraform ≥ 1.9.
+- Ejecutar un nuevo pipeline en el runner `cloudrun` y confirmar que el job
+  `terraform` descarga, verifica y usa Terraform 1.16.3.
 - Grabar el vídeo de demostración.
